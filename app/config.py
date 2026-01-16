@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     audio_bit_depth: int = 16
     audio_buffer_size: int = 3200
     
+    # 音频输出配置
+    save_audio_output: bool = True
+    audio_output_dir: str = "/cpfs/user/zhaochenxu1/users/liujinming/git_program/mp3"
+    
     # VAD配置
     vad_aggressiveness: int = 2
     vad_frame_duration: int = 30

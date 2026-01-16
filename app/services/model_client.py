@@ -55,7 +55,8 @@ class ModelServiceClient:
 
                 history["messages"].append({
                     "role": "assistant",
-                    "content": f"[模拟ASR结果]: {reply}"
+                    "content": reply,
+                    "tts_text": reply
                 })
 
                 logger.info(f"模型回复: {reply[:100]}")
@@ -74,22 +75,24 @@ class ModelServiceClient:
             return
 
         history = self._session_history[session_id]
+        
+        last_message = history["messages"][-1]
+        tts_input = last_message.get("tts_text") or last_message.get("content", "")
 
         try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    "POST",
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
                     f"{self.base_url}/v1/audio/speech",
                     json={
                         "model": self.model,
-                        "input": history["messages"][-1]["content"],
+                        "input": tts_input,
                         "voice": "alloy",
                         "response_format": "mp3"
                     }
-                ) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
+                )
+                response.raise_for_status()
+                # Yield the entire audio content as a single chunk
+                yield response.content
 
         except Exception as e:
             logger.error(f"生成语音失败: {e}")
