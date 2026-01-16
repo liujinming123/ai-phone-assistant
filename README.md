@@ -11,6 +11,7 @@
 - **HTTP客户端**: HTTPx + aiohttp
 - **日志**: Loguru
 - **阿里云SDK**: alibabacloud-tea-openapi
+- **语音模型**: Qwen3-Omni-30B-A3B-Instruct
 
 ## 功能特性
 
@@ -21,26 +22,27 @@
 - ✅ 多路并发支持
 - ✅ 对话历史管理
 - ✅ 日志记录
+- ✅ TTS语音合成
 
 ## 项目结构
 
 ```
-AI_phone/
-├── app/
+ai-phone-assistant/
+├── app/                    # 核心应用代码
 │   ├── __init__.py
-│   ├── main.py              # FastAPI应用入口
-│   ├── config.py            # 配置管理
+│   ├── main.py             # FastAPI应用入口
+│   ├── config.py           # 配置管理
 │   │
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── routes.py        # HTTP API路由
-│   │   └── websocket.py     # WebSocket端点
+│   │   ├── routes.py       # HTTP API路由
+│   │   └── websocket.py    # WebSocket端点
 │   │
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── call_manager.py     # 呼叫管理
 │   │   ├── audio_processor.py  # 音频处理
-│   │   ├── model_client.py      # 远程模型客户端
+│   │   ├── model_client.py     # 远程模型客户端
 │   │   ├── session_manager.py  # 会话管理
 │   │   ├── vad_service.py      # VAD检测
 │   │   └── logger_service.py   # 日志服务
@@ -53,11 +55,15 @@ AI_phone/
 │   └── utils/
 │       └── __init__.py
 │
-├── logs/                    # 日志目录
-├── recordings/              # 录音文件存储
-├── database/                # 数据库文件
-├── .env                     # 环境变量配置
-├── requirements.txt          # Python依赖
+├── tools/                  # 开发工具脚本
+├── tests/                  # 测试用例
+├── database/               # 数据库文件
+├── logs/                   # 日志目录
+├── recordings/             # 录音文件存储
+├── text_to_audio.py        # 文本转音频工具
+├── .env                    # 环境变量配置
+├── .env.example
+├── requirements.txt
 └── README.md
 ```
 
@@ -71,13 +77,13 @@ AI_phone/
 ### 1. 创建Conda环境
 
 ```bash
-~/miniconda3/Scripts/conda.exe create -n AI_phone python=3.10 -y
+conda create -n ljm_asr python=3.10 -y
 ```
 
 ### 2. 激活环境
 
 ```bash
-conda activate AI_phone
+conda activate ljm_asr
 ```
 
 ### 3. 安装依赖
@@ -91,9 +97,10 @@ pip install -r requirements.txt
 复制 `.env.example` 为 `.env` 并配置以下变量：
 
 ```bash
-# 远程模型服务
-MODEL_SERVICE_URL=http://your-model-service-url
-MODEL_SERVICE_API_KEY=your-api-key
+# 远程模型服务 (OpenAI兼容API)
+REMOTE_MODEL_SERVICE_URL=http://10.246.32.45:8091
+REMOTE_MODEL_SERVICE_API_KEY=                    # 可为空
+REMOTE_MODEL_SERVICE_TIMEOUT=30
 
 # 阿里云配置
 ALIYUN_ACCESS_KEY_ID=your-access-key-id
@@ -106,16 +113,36 @@ ALIYUN_CALL_CENTER_INSTANCE_ID=your-instance-id
 ## 运行服务
 
 ```bash
-# 开发模式
-python app/main.py
+# 取消代理环境变量
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export no_proxy="10.246.32.45,localhost,127.0.0.1"
+
+# 启动服务
+cd /cpfs/user/zhaochenxu1/users/liujinming/git_program/ai-phone-assistant
+PYTHONPATH=/cpfs/user/zhaochenxu1/users/liujinming/git_program/ai-phone-assistant \
+  conda run -n ljm_asr python app/main.py
 
 # 或使用uvicorn
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+PYTHONPATH=/cpfs/user/zhaochenxu1/users/liujinming/git_program/ai-phone-assistant \
+  conda run -n ljm_asr uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 服务启动后访问：
 - API文档: http://localhost:8000/docs
 - 健康检查: http://localhost:8000/health
+
+## 工具脚本
+
+### 文本转音频
+
+```bash
+cd /cpfs/user/zhaochenxu1/users/liujinming/git_program/ai-phone-assistant
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export no_proxy="10.246.32.45"
+conda run -n ljm_asr python text_to_audio.py "你的问题"
+
+# 输出: /cpfs/user/zhaochenxu1/users/liujinming/git_program/mp3/response.wav
+```
 
 ## API接口
 
@@ -159,7 +186,23 @@ ws://localhost:8000/ws/call/{call_id}
 - 服务端 → 客户端：二进制音频数据（PCM 16kHz，AI语音）
 - 控制消息：JSON格式
 
+## 支持的模型
+
+| 模型 | 说明 |
+|------|------|
+| Qwen3-Omni-30B-A3B-Instruct | 语音/文本多模态模型 |
+| API格式 | OpenAI兼容 |
+| TTS格式 | 支持wav |
+
 ## 注意事项
+
+### 代理配置
+
+访问模型服务 `http://10.246.32.45:8091` 时需要取消代理：
+```bash
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export no_proxy="10.246.32.45,localhost,127.0.0.1"
+```
 
 ### PyAudio安装
 
@@ -202,7 +245,7 @@ pydub需要FFmpeg来处理音频文件：
 
 ### API调用失败
 - 检查.env配置是否正确
-- 验证API Key是否有效
+- 验证代理配置是否已取消
 - 查看日志文件获取详细错误信息
 
 ## 许可证
